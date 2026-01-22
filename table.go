@@ -24,10 +24,9 @@ type TableAccessor[T any] interface {
 
 // CnipsTableAccessor is a concrete implementation of TableAccessor for CNIPS.
 type CnipsTableAccessor[T any] struct {
-	client    *http.Client
-	BaseURL   string
-	ApiKey    string
-	TenantKey string
+	client  *http.Client
+	BaseURL string
+	ApiKey  string
 }
 
 // Config holds configuration options for CnipsTableAccessor.
@@ -43,13 +42,12 @@ type Config struct {
 // NewCnipsTableAccessor creates a new CnipsTableAccessor instance.
 // The parameter baseURL is the base URL of the CNIPS instance and it is mandatory.
 // The parameter apiKey is the API key that can be created in the CNIPS instance and it is mandatory.
-// The parameter tenantKey is the tenant key for multi-tenant support and it is mandatory.
-func NewCnipsTableAccessor[T any](baseURL, apiKey, tenantKey string) *CnipsTableAccessor[T] {
-	return NewCnipsTableAccessorWithConfig[T](baseURL, apiKey, tenantKey, Config{})
+func NewCnipsTableAccessor[T any](baseURL, apiKey string) *CnipsTableAccessor[T] {
+	return NewCnipsTableAccessorWithConfig[T](baseURL, apiKey, Config{})
 }
 
 // NewCnipsTableAccessorWithConfig creates a new CnipsTableAccessor instance with custom configuration.
-func NewCnipsTableAccessorWithConfig[T any](baseURL, apiKey, tenantKey string, config Config) *CnipsTableAccessor[T] {
+func NewCnipsTableAccessorWithConfig[T any](baseURL, apiKey string, config Config) *CnipsTableAccessor[T] {
 	client := config.HTTPClient
 	if client == nil {
 		timeout := config.Timeout
@@ -62,10 +60,9 @@ func NewCnipsTableAccessorWithConfig[T any](baseURL, apiKey, tenantKey string, c
 	}
 
 	return &CnipsTableAccessor[T]{
-		client:    client,
-		BaseURL:   strings.TrimSuffix(baseURL, "/"),
-		ApiKey:    apiKey,
-		TenantKey: tenantKey,
+		client:  client,
+		BaseURL: strings.TrimSuffix(baseURL, "/"),
+		ApiKey:  apiKey,
 	}
 }
 
@@ -106,7 +103,6 @@ func (t *CnipsTableAccessor[T]) buildSearchURL(tableId string) (string, error) {
 // setHeaders sets the headers for the request.
 func (t *CnipsTableAccessor[T]) setHeaders(req *http.Request) {
 	req.Header.Set("X-API-Key", t.ApiKey)
-	req.Header.Set("X-Tenant-Key", t.TenantKey)
 	req.Header.Set("Content-Type", "application/json")
 }
 

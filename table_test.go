@@ -28,7 +28,7 @@ func (u UnmarshalableData) MarshalJSON() ([]byte, error) {
 
 func TestNewCnipsTableAccessor(t *testing.T) {
 	t.Run("Basic", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 
 		if accessor == nil {
 			t.Fatal("NewCnipsTableAccessor returned nil")
@@ -40,10 +40,6 @@ func TestNewCnipsTableAccessor(t *testing.T) {
 
 		if accessor.ApiKey != "api-key" {
 			t.Errorf("expected ApiKey 'api-key', got '%s'", accessor.ApiKey)
-		}
-
-		if accessor.TenantKey != "tenant-key" {
-			t.Errorf("expected TenantKey 'tenant-key', got '%s'", accessor.TenantKey)
 		}
 
 		if accessor.client == nil {
@@ -62,7 +58,6 @@ func TestNewCnipsTableAccessorWithConfig(t *testing.T) {
 		accessor := NewCnipsTableAccessorWithConfig[TestData](
 			"https://example.com",
 			"api-key",
-			"tenant-key",
 			Config{HTTPClient: customClient},
 		)
 
@@ -73,7 +68,7 @@ func TestNewCnipsTableAccessorWithConfig(t *testing.T) {
 }
 
 func TestBuildURL(t *testing.T) {
-	accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+	accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 	t.Run("Basic", func(t *testing.T) {
 		url, err := accessor.buildURL("table1")
 		if err != nil {
@@ -101,7 +96,7 @@ func TestBuildURL(t *testing.T) {
 }
 
 func TestBuildSearchURL(t *testing.T) {
-	accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+	accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 	t.Run("Basic", func(t *testing.T) {
 		url, err := accessor.buildSearchURL("table1")
 		if err != nil {
@@ -133,13 +128,10 @@ func TestSetHeaders(t *testing.T) {
 		request := &http.Request{
 			Header: make(http.Header),
 		}
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		accessor.setHeaders(request)
 		if request.Header.Get("X-API-Key") != "api-key" {
 			t.Error("missing or incorrect X-API-Key header")
-		}
-		if request.Header.Get("X-Tenant-Key") != "tenant-key" {
-			t.Error("missing or incorrect X-Tenant-Key header")
 		}
 		if request.Header.Get("Content-Type") != "application/json" {
 			t.Error("missing or incorrect Content-Type header")
@@ -148,7 +140,7 @@ func TestSetHeaders(t *testing.T) {
 }
 
 func TestDoRequest(t *testing.T) {
-	accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+	accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 	t.Run("Basic", func(t *testing.T) {
 		_, err := accessor.doRequest(context.Background(), http.MethodPost, "https://example.com", nil)
 		if err != nil {
@@ -175,7 +167,7 @@ func TestDoRequest(t *testing.T) {
 }
 
 func TestHandleResponse(t *testing.T) {
-	accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+	accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 	t.Run("Success", func(t *testing.T) {
 		resp := &http.Response{
 			StatusCode: http.StatusOK,
@@ -227,9 +219,6 @@ func TestInsert(t *testing.T) {
 			if r.Header.Get("X-API-Key") != "api-key" {
 				t.Error("missing or incorrect X-API-Key header")
 			}
-			if r.Header.Get("X-Tenant-Key") != "tenant-key" {
-				t.Error("missing or incorrect X-Tenant-Key header")
-			}
 			var data []TestData
 			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
@@ -241,7 +230,7 @@ func TestInsert(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		err := accessor.Insert(context.Background(), "table1", data)
 		if err != nil {
@@ -255,7 +244,7 @@ func TestInsert(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		err := accessor.Insert(context.Background(), "table1", data)
 		if err != nil {
@@ -264,7 +253,7 @@ func TestInsert(t *testing.T) {
 	})
 
 	t.Run("NilData", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		err := accessor.Insert(context.Background(), "table1", nil)
 		if err == nil {
 			t.Fatal("expected error for nil data")
@@ -275,7 +264,7 @@ func TestInsert(t *testing.T) {
 	})
 
 	t.Run("EmptyTableId", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		err := accessor.Insert(context.Background(), "", data)
 		if err == nil {
@@ -284,7 +273,7 @@ func TestInsert(t *testing.T) {
 	})
 
 	t.Run("InvalidBaseURL", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("://invalid", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("://invalid", "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		err := accessor.Insert(context.Background(), "table1", data)
 		if err == nil {
@@ -299,7 +288,7 @@ func TestInsert(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		err := accessor.Insert(context.Background(), "table1", data)
 		if err == nil {
@@ -308,7 +297,7 @@ func TestInsert(t *testing.T) {
 	})
 
 	t.Run("MarshalError", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[UnmarshalableData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[UnmarshalableData]("https://example.com", "api-key")
 		data := &UnmarshalableData{ID: 1}
 		err := accessor.Insert(context.Background(), "table1", data)
 		if err == nil {
@@ -317,7 +306,7 @@ func TestInsert(t *testing.T) {
 	})
 
 	t.Run("NetworkError", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key")
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 
@@ -346,7 +335,7 @@ func TestBulkInsert(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := []TestData{
 			{ID: 1, Name: "test1"},
 			{ID: 2, Name: "test2"},
@@ -358,7 +347,7 @@ func TestBulkInsert(t *testing.T) {
 	})
 
 	t.Run("EmptyData", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		err := accessor.BulkInsert(context.Background(), "table1", []TestData{})
 		if err == nil {
 			t.Fatal("expected error for empty data")
@@ -369,7 +358,7 @@ func TestBulkInsert(t *testing.T) {
 	})
 
 	t.Run("EmptyTableId", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		data := []TestData{{ID: 1, Name: "test"}}
 		err := accessor.BulkInsert(context.Background(), "", data)
 		if err == nil {
@@ -384,7 +373,7 @@ func TestBulkInsert(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := []TestData{{ID: 1, Name: "test"}}
 		err := accessor.BulkInsert(context.Background(), "table1", data)
 		if err == nil {
@@ -393,7 +382,7 @@ func TestBulkInsert(t *testing.T) {
 	})
 
 	t.Run("MarshalError", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[UnmarshalableData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[UnmarshalableData]("https://example.com", "api-key")
 		data := []UnmarshalableData{{ID: 1}}
 		err := accessor.BulkInsert(context.Background(), "table1", data)
 		if err == nil {
@@ -402,7 +391,7 @@ func TestBulkInsert(t *testing.T) {
 	})
 
 	t.Run("NetworkError", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key")
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 
@@ -437,7 +426,7 @@ func TestFind(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		results, err := accessor.Find(context.Background(), "table1", map[string]any{"id": 1})
 		if err != nil {
 			t.Fatalf("Find failed: %v", err)
@@ -448,7 +437,7 @@ func TestFind(t *testing.T) {
 	})
 
 	t.Run("EmptyTableId", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		_, err := accessor.Find(context.Background(), "", map[string]any{})
 		if err == nil {
 			t.Fatal("expected error for empty tableId")
@@ -462,7 +451,7 @@ func TestFind(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		_, err := accessor.Find(context.Background(), "table1", map[string]any{})
 		if err == nil {
 			t.Fatal("expected error for bad status")
@@ -477,7 +466,7 @@ func TestFind(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		_, err := accessor.Find(context.Background(), "table1", map[string]any{})
 		if err == nil {
 			t.Fatal("expected error for invalid JSON")
@@ -498,7 +487,7 @@ func TestFind(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		_, err := accessor.Find(context.Background(), "table1", map[string]any{})
 		if err == nil {
 			t.Fatal("expected error for invalid data type in response")
@@ -519,7 +508,7 @@ func TestFind(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		_, err := accessor.Find(context.Background(), "table1", map[string]any{})
 		if err == nil {
 			t.Fatal("expected error for unmarshalable data in response")
@@ -527,7 +516,7 @@ func TestFind(t *testing.T) {
 	})
 
 	t.Run("MarshalQueryError", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		query := map[string]any{
 			"data": UnmarshalableData{ID: 1},
 		}
@@ -538,7 +527,7 @@ func TestFind(t *testing.T) {
 	})
 
 	t.Run("NetworkError", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key")
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 
@@ -563,7 +552,7 @@ func TestDelete(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		err := accessor.Delete(context.Background(), "table1", map[string]any{"id": 1})
 		if err != nil {
 			t.Fatalf("Delete failed: %v", err)
@@ -576,7 +565,7 @@ func TestDelete(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		err := accessor.Delete(context.Background(), "table1", map[string]any{"id": 1})
 		if err != nil {
 			t.Fatalf("Delete failed: %v", err)
@@ -584,7 +573,7 @@ func TestDelete(t *testing.T) {
 	})
 
 	t.Run("EmptyTableId", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		err := accessor.Delete(context.Background(), "", map[string]any{})
 		if err == nil {
 			t.Fatal("expected error for empty tableId")
@@ -598,7 +587,7 @@ func TestDelete(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		err := accessor.Delete(context.Background(), "table1", map[string]any{})
 		if err == nil {
 			t.Fatal("expected error for bad status")
@@ -606,7 +595,7 @@ func TestDelete(t *testing.T) {
 	})
 
 	t.Run("MarshalQueryError", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		query := map[string]any{
 			"data": UnmarshalableData{ID: 1},
 		}
@@ -617,7 +606,7 @@ func TestDelete(t *testing.T) {
 	})
 
 	t.Run("NetworkError", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key")
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 
@@ -647,7 +636,7 @@ func TestUpdate(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := &TestData{ID: 1, Name: "updated"}
 		results, err := accessor.Update(context.Background(), "table1", map[string]any{"id": 1}, data)
 		if err != nil {
@@ -662,7 +651,7 @@ func TestUpdate(t *testing.T) {
 	})
 
 	t.Run("NilData", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		_, err := accessor.Update(context.Background(), "table1", map[string]any{}, nil)
 		if err == nil {
 			t.Fatal("expected error for nil data")
@@ -673,7 +662,7 @@ func TestUpdate(t *testing.T) {
 	})
 
 	t.Run("EmptyTableId", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		_, err := accessor.Update(context.Background(), "", map[string]any{}, data)
 		if err == nil {
@@ -688,7 +677,7 @@ func TestUpdate(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		_, err := accessor.Update(context.Background(), "table1", map[string]any{}, data)
 		if err == nil {
@@ -707,7 +696,7 @@ func TestUpdate(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		_, err := accessor.Update(context.Background(), "table1", map[string]any{}, data)
 		if err == nil {
@@ -726,7 +715,7 @@ func TestUpdate(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		_, err := accessor.Update(context.Background(), "table1", map[string]any{}, data)
 		if err == nil {
@@ -745,7 +734,7 @@ func TestUpdate(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		_, err := accessor.Update(context.Background(), "table1", map[string]any{}, data)
 		if err == nil {
@@ -764,7 +753,7 @@ func TestUpdate(t *testing.T) {
 		}))
 		defer server.Close()
 
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		_, err := accessor.Update(context.Background(), "table1", map[string]any{}, data)
 		if err == nil {
@@ -773,7 +762,7 @@ func TestUpdate(t *testing.T) {
 	})
 
 	t.Run("MarshalRequestBodyError", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		query := map[string]any{
 			"data": UnmarshalableData{ID: 1},
 		}
@@ -794,7 +783,7 @@ func TestUpdate(t *testing.T) {
 			json.NewEncoder(w).Encode(response)
 		}))
 		defer server.Close()
-		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
 		data := &TestData{ID: 1, Name: "test"}
 		_, err := accessor.Update(context.Background(), "table1", map[string]any{}, data)
 		if err == nil {
@@ -803,7 +792,7 @@ func TestUpdate(t *testing.T) {
 	})
 
 	t.Run("NetworkError", func(t *testing.T) {
-		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key", "tenant-key")
+		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key")
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 

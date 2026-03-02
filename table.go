@@ -234,14 +234,18 @@ func (t *CnipsTableAccessor[T]) Find(ctx context.Context, tableId string, query 
 	}
 
 	var results struct {
-		List  []map[string]any `json:"list"`
-		Count int              `json:"count"`
+		Success string `json:"success"`
+		Status  string `json:"status"`
+		Data    struct {
+			List  []map[string]any `json:"list"`
+			Count int              `json:"count"`
+		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
-	resultsT := make([]T, results.Count)
-	for i, result := range results.List {
+	resultsT := make([]T, results.Data.Count)
+	for i, result := range results.Data.List {
 		dataBytes, err := json.Marshal(result["data"])
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal row data: %w", err)
@@ -318,13 +322,17 @@ func (t *CnipsTableAccessor[T]) Update(ctx context.Context, tableId string, quer
 		return nil, fmt.Errorf("unexpected status code %d: %s (response: %s)", resp.StatusCode, resp.Status, bodyStr)
 	}
 
-	var results []map[string]any
+	var results struct {
+		Success string           `json:"success"`
+		Status  string           `json:"status"`
+		Data    []map[string]any `json:"data"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	resultsT := make([]T, len(results))
-	for i, result := range results {
+	resultsT := make([]T, len(results.Data))
+	for i, result := range results.Data {
 		dataBytes, err := json.Marshal(result["data"])
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal row data: %w", err)

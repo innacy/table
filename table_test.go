@@ -409,16 +409,25 @@ func TestFind(t *testing.T) {
 			if r.Method != http.MethodPost {
 				t.Errorf("expected POST, got %s", r.Method)
 			}
+			if r.URL.Query().Get("size") != "1000" {
+				t.Errorf("expected size=1000, got %s", r.URL.Query().Get("size"))
+			}
+			if r.URL.Query().Get("page") != "0" {
+				t.Errorf("expected page=0, got %s", r.URL.Query().Get("page"))
+			}
 			var requestBody map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 			}
 			response := map[string]any{
-				"list": []map[string]any{
-					{"data": map[string]any{"id": 1, "name": "test1"}},
-					{"data": map[string]any{"id": 2, "name": "test2"}},
+				"success": true,
+				"data": map[string]any{
+					"list": []map[string]any{
+						{"data": map[string]any{"id": 1, "name": "test1"}},
+						{"data": map[string]any{"id": 2, "name": "test2"}},
+					},
+					"count": 2,
 				},
-				"count": 2,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -476,10 +485,13 @@ func TestFind(t *testing.T) {
 	t.Run("InvalidDataJSON", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			response := map[string]any{
-				"list": []map[string]any{
-					{"data": map[string]any{"id": "not an int", "name": "test"}},
+				"success": true,
+				"data": map[string]any{
+					"list": []map[string]any{
+						{"data": map[string]any{"id": "not an int", "name": "test"}},
+					},
+					"count": 1,
 				},
-				"count": 1,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -497,10 +509,13 @@ func TestFind(t *testing.T) {
 	t.Run("MarshalDataError", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			response := map[string]any{
-				"list": []map[string]any{
-					{"data": UnmarshalableData{ID: 1}},
+				"success": true,
+				"data": map[string]any{
+					"list": []map[string]any{
+						{"data": UnmarshalableData{ID: 1}},
+					},
+					"count": 1,
 				},
-				"count": 1,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -627,8 +642,11 @@ func TestUpdate(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 			}
-			response := []map[string]any{
-				{"data": map[string]any{"id": 1, "name": "updated"}},
+			response := map[string]any{
+				"success": true,
+				"data": []map[string]any{
+					{"data": map[string]any{"id": 1, "name": "updated"}},
+				},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -725,8 +743,11 @@ func TestUpdate(t *testing.T) {
 
 	t.Run("InvalidDataJSON", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			response := []map[string]any{
-				{"data": map[string]any{"id": "not an int", "name": "test"}},
+			response := map[string]any{
+				"success": true,
+				"data": []map[string]any{
+					{"data": map[string]any{"id": "not an int", "name": "test"}},
+				},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -744,8 +765,11 @@ func TestUpdate(t *testing.T) {
 
 	t.Run("MarshalDataError", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			response := []map[string]any{
-				{"data": UnmarshalableData{ID: 1}},
+			response := map[string]any{
+				"success": true,
+				"data": []map[string]any{
+					{"data": UnmarshalableData{ID: 1}},
+				},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -775,8 +799,11 @@ func TestUpdate(t *testing.T) {
 
 	t.Run("MarshalDataInBodyError", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			response := []map[string]any{
-				{"data": UnmarshalableData{ID: 1}},
+			response := map[string]any{
+				"success": true,
+				"data": []map[string]any{
+					{"data": UnmarshalableData{ID: 1}},
+				},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)

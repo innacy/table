@@ -9,15 +9,24 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
+
+// FindOptions controls pagination for Find queries.
+type FindOptions struct {
+	// Size is the number of rows to return. 0 means use default (1000).
+	Size int
+	// Page is the zero-based page index. Defaults to 0.
+	Page int
+}
 
 // TableAccessor defines the interface for accessing table data.
 type TableAccessor[T any] interface {
 	Insert(ctx context.Context, tableId string, data *T) error
 	BulkInsert(ctx context.Context, tableId string, data []T) error
-	Find(ctx context.Context, tableId string, query map[string]any) ([]T, error)
+	Find(ctx context.Context, tableId string, query map[string]any, opts ...FindOptions) ([]T, error)
 	Delete(ctx context.Context, tableId string, query map[string]any) error
 	Update(ctx context.Context, tableId string, query map[string]any, data *T) ([]T, error)
 }
@@ -203,13 +212,32 @@ func (t *CnipsTableAccessor[T]) BulkInsert(ctx context.Context, tableId string, 
 
 // Find retrieves records from the specified table matching the query.
 // Uses POST request to /search endpoint with query in the request body.
-func (t *CnipsTableAccessor[T]) Find(ctx context.Context, tableId string, query map[string]any) ([]T, error) {
+// Without FindOptions, defaults to size=1000 to avoid the server's default of 10.
+func (t *CnipsTableAccessor[T]) Find(ctx context.Context, tableId string, query map[string]any, opts ...FindOptions) ([]T, error) {
 	requestURL, err := t.buildSearchURL(tableId)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create request body with query
+	size := 1000
+	page := 0
+	if len(opts) > 0 {
+		if opts[0].Size > 0 {
+			size = opts[0].Size
+		}
+		page = opts[0].Page
+	}
+
+	parsed, err := url.Parse(requestURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse search URL: %w", err)
+	}
+	q := parsed.Query()
+	q.Set("size", strconv.Itoa(size))
+	q.Set("page", strconv.Itoa(page))
+	parsed.RawQuery = q.Encode()
+	requestURL = parsed.String()
+
 	requestBody := map[string]any{
 		"filters": query,
 	}

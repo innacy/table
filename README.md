@@ -1,8 +1,8 @@
 # table
 
-A small, generic Go client for accessing tables in a [CNIPS](https://cnips.io) instance over HTTP.
+A small, generic Go client for accessing tables in a [cnips](https://cnips.io) instance over HTTP.
 
-The package exposes a typed `TableAccessor[T]` interface and a concrete `CnipsTableAccessor[T]` implementation that maps Go structs to rows in a CNIPS table.
+The package exposes a typed `TableAccessor[T]` interface and a concrete `CnipsTableAccessor[T]` implementation that maps Go structs to rows in a cnips table.
 
 ## Installation
 
@@ -100,20 +100,42 @@ accessor := table.NewCnipsTableAccessorWithConfig[User](
 
 `TableAccessor[T any]` defines the operations supported by the package:
 
-| Method                                         | Description                                                |
-| ---------------------------------------------- | ---------------------------------------------------------- |
-| `Insert(ctx, tableId, *T) error`               | Insert a single row.                                       |
-| `BulkInsert(ctx, tableId, []T) error`          | Insert multiple rows in one request.                       |
-| `Find(ctx, tableId, query) ([]T, error)`       | Search rows matching the filter map.                       |
-| `Update(ctx, tableId, query, *T) ([]T, error)` | Update rows matching the filter; returns the updated rows. |
-| `Delete(ctx, tableId, query) error`            | Delete rows matching the filter.                           |
+| Method                                                        | Description                                                |
+| ------------------------------------------------------------- | ---------------------------------------------------------- |
+| `Insert(ctx, tableId, *T) error`                              | Insert a single row.                                       |
+| `BulkInsert(ctx, tableId, []T) error`                         | Insert multiple rows in one request.                       |
+| `Find(ctx, tableId, query, ...FindOptions) ([]T, error)`      | Search rows matching the filter map.                       |
+| `Update(ctx, tableId, query, *T) ([]T, error)`                | Update rows matching the filter; returns the updated rows. |
+| `Delete(ctx, tableId, query) error`                           | Delete rows matching the filter.                           |
 
-The `query` map is sent to CNIPS as `{"filters": <query>}` and follows the CNIPS row-search semantics.
+The `query` map is sent to cnips as `{"filters": <query>}` and follows the cnips row-search semantics.
+
+### Pagination (FindOptions)
+
+`Find` accepts an optional `FindOptions` struct to control pagination:
+
+```go
+type FindOptions struct {
+    Size int // Number of rows to return (default: 1000)
+    Page int // Zero-based page index (default: 0)
+}
+```
+
+When no `FindOptions` is provided, `Find` defaults to `size=1000`. This avoids the server-side default of 10 rows while keeping a reasonable limit. Use `FindOptions` to paginate or increase the limit for larger datasets.
+
+```go
+// Get all rows (uses default size=10000)
+users, err := accessor.Find(ctx, tableID, map[string]any{})
+
+// Paginate explicitly
+page1, err := accessor.Find(ctx, tableID, map[string]any{}, table.FindOptions{Size: 50, Page: 0})
+page2, err := accessor.Find(ctx, tableID, map[string]any{}, table.FindOptions{Size: 50, Page: 1})
+```
 
 ### HTTP endpoints used
 
 - `POST /tables/{tableId}/rows` — insert / bulk insert
-- `POST /tables/{tableId}/rows/search` — find
+- `POST /tables/{tableId}/rows/search?size=N&page=N` — find
 - `PUT  /tables/{tableId}/rows` — update
 - `DELETE /tables/{tableId}/rows` — delete
 

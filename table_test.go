@@ -409,12 +409,6 @@ func TestFind(t *testing.T) {
 			if r.Method != http.MethodPost {
 				t.Errorf("expected POST, got %s", r.Method)
 			}
-			if r.URL.Query().Get("size") != "1000" {
-				t.Errorf("expected size=1000, got %s", r.URL.Query().Get("size"))
-			}
-			if r.URL.Query().Get("page") != "0" {
-				t.Errorf("expected page=0, got %s", r.URL.Query().Get("page"))
-			}
 			var requestBody map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
@@ -426,7 +420,7 @@ func TestFind(t *testing.T) {
 						{"data": map[string]any{"id": 1, "name": "test1"}},
 						{"data": map[string]any{"id": 2, "name": "test2"}},
 					},
-					"count": 2,
+					"count": 5,
 				},
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -442,6 +436,39 @@ func TestFind(t *testing.T) {
 		}
 		if len(results) != 2 {
 			t.Errorf("expected 2 results, got %d", len(results))
+		}
+	})
+
+	t.Run("WithPaginationOptions", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("size") != "50" {
+				t.Errorf("expected size=50, got %s", r.URL.Query().Get("size"))
+			}
+			if r.URL.Query().Get("page") != "2" {
+				t.Errorf("expected page=2, got %s", r.URL.Query().Get("page"))
+			}
+			response := map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"list": []map[string]any{
+						{"data": map[string]any{"id": 1, "name": "test1"}},
+					},
+					"count": 120,
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(response)
+		}))
+		defer server.Close()
+
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
+		results, err := accessor.Find(context.Background(), "table1", map[string]any{}, FindOptions{Size: 50, Page: 2})
+		if err != nil {
+			t.Fatalf("Find with options failed: %v", err)
+		}
+		if len(results) != 1 {
+			t.Errorf("expected 1 result, got %d", len(results))
 		}
 	})
 
@@ -824,6 +851,118 @@ func TestUpdate(t *testing.T) {
 		defer cancel()
 
 		_, err := accessor.Update(ctx, "table1", map[string]any{}, &TestData{ID: 1, Name: "test"})
+		if err == nil {
+			t.Fatal("expected error for network failure")
+		}
+	})
+}
+
+func TestCount(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				t.Errorf("expected POST, got %s", r.Method)
+			}
+			if r.URL.Query().Get("size") != "1" {
+				t.Errorf("expected size=1, got %s", r.URL.Query().Get("size"))
+			}
+			response := map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"list":  []map[string]any{},
+					"count": 42,
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(response)
+		}))
+		defer server.Close()
+
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
+		count, err := accessor.Count(context.Background(), "table1", map[string]any{"department": "IT"})
+		if err != nil {
+			t.Fatalf("Count failed: %v", err)
+		}
+		if count != 42 {
+			t.Errorf("expected count 42, got %d", count)
+		}
+	})
+
+	t.Run("EmptyQuery", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			response := map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"list":  []map[string]any{},
+					"count": 100,
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(response)
+		}))
+		defer server.Close()
+
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
+		count, err := accessor.Count(context.Background(), "table1", map[string]any{})
+		if err != nil {
+			t.Fatalf("Count failed: %v", err)
+		}
+		if count != 100 {
+			t.Errorf("expected count 100, got %d", count)
+		}
+	})
+
+	t.Run("EmptyTableId", func(t *testing.T) {
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
+		_, err := accessor.Count(context.Background(), "", map[string]any{})
+		if err == nil {
+			t.Fatal("expected error for empty tableId")
+		}
+	})
+
+	t.Run("ErrorStatus", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("server error"))
+		}))
+		defer server.Close()
+
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
+		_, err := accessor.Count(context.Background(), "table1", map[string]any{})
+		if err == nil {
+			t.Fatal("expected error for bad status")
+		}
+	})
+
+	t.Run("FailedResponse", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			response := map[string]any{
+				"success": false,
+				"data": map[string]any{
+					"count": 0,
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(response)
+		}))
+		defer server.Close()
+
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
+		_, err := accessor.Count(context.Background(), "table1", map[string]any{})
+		if err == nil {
+			t.Fatal("expected error for failed response")
+		}
+	})
+
+	t.Run("NetworkError", func(t *testing.T) {
+		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key")
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		_, err := accessor.Count(ctx, "table1", map[string]any{})
 		if err == nil {
 			t.Fatal("expected error for network failure")
 		}

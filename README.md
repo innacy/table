@@ -62,6 +62,13 @@ func main() {
     }
     log.Printf("found %d users", len(users))
 
+    // Get total count of rows matching a query
+    total, err := accessor.Count(ctx, tableID, map[string]any{})
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("table has %d total rows", total)
+
     // Update rows matching a query
     updated, err := accessor.Update(ctx, tableID, map[string]any{
         "name": "Ada",
@@ -100,36 +107,46 @@ accessor := table.NewCnipsTableAccessorWithConfig[User](
 
 `TableAccessor[T any]` defines the operations supported by the package:
 
-| Method                                                        | Description                                                |
-| ------------------------------------------------------------- | ---------------------------------------------------------- |
-| `Insert(ctx, tableId, *T) error`                              | Insert a single row.                                       |
-| `BulkInsert(ctx, tableId, []T) error`                         | Insert multiple rows in one request.                       |
-| `Find(ctx, tableId, query, ...FindOptions) ([]T, error)`      | Search rows matching the filter map.                       |
-| `Update(ctx, tableId, query, *T) ([]T, error)`                | Update rows matching the filter; returns the updated rows. |
-| `Delete(ctx, tableId, query) error`                           | Delete rows matching the filter.                           |
+| Method                                                             | Description                                                |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `Insert(ctx, tableId, *T) error`                                   | Insert a single row.                                       |
+| `BulkInsert(ctx, tableId, []T) error`                              | Insert multiple rows in one request.                       |
+| `Find(ctx, tableId, query, ...FindOptions) ([]T, error)`           | Search rows matching the filter map.                       |
+| `Count(ctx, tableId, query) (int, error)`                          | Get total number of rows matching the filter.              |
+| `Update(ctx, tableId, query, *T) ([]T, error)`                     | Update rows matching the filter; returns the updated rows. |
+| `Delete(ctx, tableId, query) error`                                | Delete rows matching the filter.                           |
 
 The `query` map is sent to cnips as `{"filters": <query>}` and follows the cnips row-search semantics.
 
 ### Pagination (FindOptions)
 
-`Find` accepts an optional `FindOptions` struct to control pagination:
+You can pass an optional `FindOptions` struct to control pagination:
 
 ```go
 type FindOptions struct {
-    Size int // Number of rows to return (default: 1000)
-    Page int // Zero-based page index (default: 0)
+    Size int // Rows per page (1–10000). Server default: 10.
+    Page int // Zero-based page index. Server default: 0.
 }
 ```
 
-When no `FindOptions` is provided, `Find` defaults to `size=1000`. This avoids the server-side default of 10 rows while keeping a reasonable limit. Use `FindOptions` to paginate or increase the limit for larger datasets.
+> **Note:** Without `FindOptions`, the server returns at most **10 rows** (the default page size). The maximum allowed size is **10000**.
+
+Use `Count` to get the total number of matching rows, then paginate with `Find`:
 
 ```go
-// Get all rows (uses default size=10000)
-users, err := accessor.Find(ctx, tableID, map[string]any{})
+// Get total count
+total, _ := accessor.Count(ctx, tableID, map[string]any{"department": "IT"})
+fmt.Printf("%d total rows\n", total)
 
-// Paginate explicitly
-page1, err := accessor.Find(ctx, tableID, map[string]any{}, table.FindOptions{Size: 50, Page: 0})
-page2, err := accessor.Find(ctx, tableID, map[string]any{}, table.FindOptions{Size: 50, Page: 1})
+// Paginate through all results
+pageSize := 50
+for page := 0; page * pageSize < total; page++ {
+    rows, _ := accessor.Find(ctx, tableID, map[string]any{"department": "IT"}, table.FindOptions{Size: pageSize, Page: page})
+    // process rows...
+}
+
+// Or fetch up to 10000 rows at once
+all, _ := accessor.Find(ctx, tableID, map[string]any{}, table.FindOptions{Size: 10000})
 ```
 
 ### HTTP endpoints used

@@ -15,10 +15,11 @@ import (
 )
 
 // FindOptions controls pagination for Find queries.
+// The server defaults to page=0 and size=10. Maximum size is 10000.
 type FindOptions struct {
-	// Size is the number of rows to return. 0 means use default (1000).
+	// Size is the number of rows per page (1–10000). If 0, the server uses its default of 10.
 	Size int
-	// Page is the zero-based page index. Defaults to 0.
+	// Page is the zero-based page index. If 0, returns the first page.
 	Page int
 }
 
@@ -27,6 +28,7 @@ type TableAccessor[T any] interface {
 	Insert(ctx context.Context, tableId string, data *T) error
 	BulkInsert(ctx context.Context, tableId string, data []T) error
 	Find(ctx context.Context, tableId string, query map[string]any, opts ...FindOptions) ([]T, error)
+	Count(ctx context.Context, tableId string, query map[string]any) (int, error)
 	Delete(ctx context.Context, tableId string, query map[string]any) error
 	Update(ctx context.Context, tableId string, query map[string]any, data *T) ([]T, error)
 }
@@ -212,31 +214,29 @@ func (t *CnipsTableAccessor[T]) BulkInsert(ctx context.Context, tableId string, 
 
 // Find retrieves records from the specified table matching the query.
 // Uses POST request to /search endpoint with query in the request body.
-// Without FindOptions, defaults to size=1000 to avoid the server's default of 10.
+// Without FindOptions the server applies its defaults (page=0, size=10).
+// Pass FindOptions to control pagination. Maximum size is 10000.
 func (t *CnipsTableAccessor[T]) Find(ctx context.Context, tableId string, query map[string]any, opts ...FindOptions) ([]T, error) {
 	requestURL, err := t.buildSearchURL(tableId)
 	if err != nil {
 		return nil, err
 	}
 
-	size := 1000
-	page := 0
 	if len(opts) > 0 {
-		if opts[0].Size > 0 {
-			size = opts[0].Size
+		parsed, err := url.Parse(requestURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse search URL: %w", err)
 		}
-		page = opts[0].Page
+		q := parsed.Query()
+		if opts[0].Size > 0 {
+			q.Set("size", strconv.Itoa(opts[0].Size))
+		}
+		if opts[0].Page > 0 {
+			q.Set("page", strconv.Itoa(opts[0].Page))
+		}
+		parsed.RawQuery = q.Encode()
+		requestURL = parsed.String()
 	}
-
-	parsed, err := url.Parse(requestURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse search URL: %w", err)
-	}
-	q := parsed.Query()
-	q.Set("size", strconv.Itoa(size))
-	q.Set("page", strconv.Itoa(page))
-	parsed.RawQuery = q.Encode()
-	requestURL = parsed.String()
 
 	requestBody := map[string]any{
 		"filters": query,
@@ -264,8 +264,7 @@ func (t *CnipsTableAccessor[T]) Find(ctx context.Context, tableId string, query 
 	var results struct {
 		Success bool `json:"success"`
 		Data    struct {
-			List  []map[string]any `json:"list"`
-			Count int              `json:"count"`
+			List []map[string]any `json:"list"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
@@ -276,7 +275,7 @@ func (t *CnipsTableAccessor[T]) Find(ctx context.Context, tableId string, query 
 		return nil, fmt.Errorf("failed to get data")
 	}
 
-	resultsT := make([]T, results.Data.Count)
+	resultsT := make([]T, len(results.Data.List))
 	for i, result := range results.Data.List {
 		dataBytes, err := json.Marshal(result["data"])
 		if err != nil {
@@ -290,6 +289,63 @@ func (t *CnipsTableAccessor[T]) Find(ctx context.Context, tableId string, query 
 	}
 
 	return resultsT, nil
+}
+
+// Count returns the total number of rows matching the query.
+// Uses the same /search endpoint with size=1 to minimize payload.
+func (t *CnipsTableAccessor[T]) Count(ctx context.Context, tableId string, query map[string]any) (int, error) {
+	requestURL, err := t.buildSearchURL(tableId)
+	if err != nil {
+		return 0, err
+	}
+
+	parsed, err := url.Parse(requestURL)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse search URL: %w", err)
+	}
+	q := parsed.Query()
+	q.Set("size", "1")
+	parsed.RawQuery = q.Encode()
+	requestURL = parsed.String()
+
+	requestBody := map[string]any{
+		"filters": query,
+	}
+	body, err := json.Marshal(requestBody)
+	if err != nil {
+		return 0, fmt.Errorf("failed to marshal query: %w", err)
+	}
+
+	resp, err := t.doRequest(ctx, http.MethodPost, requestURL, bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyStr := string(bodyBytes)
+		if len(bodyStr) > 500 {
+			bodyStr = bodyStr[:500] + "..."
+		}
+		return 0, fmt.Errorf("unexpected status code %d: %s (response: %s)", resp.StatusCode, resp.Status, bodyStr)
+	}
+
+	var results struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Count int `json:"count"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+		return 0, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !results.Success {
+		return 0, fmt.Errorf("failed to get count")
+	}
+
+	return results.Data.Count, nil
 }
 
 // Delete removes records from the specified table matching the query.

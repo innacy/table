@@ -14,10 +14,15 @@ import (
 	"time"
 )
 
+const (
+	MaxRowsPerRequest = 20
+	MaxDeleteIDs      = 100
+)
+
 // FindOptions controls pagination for Find queries.
-// The server defaults to page=0 and size=10. Maximum size is 10000.
+// The server defaults to page=0 and size=10. Maximum size is 20.
 type FindOptions struct {
-	// Size is the number of rows per page (1–10000). If 0, the server uses its default of 10.
+	// Size is the number of rows per page (1–20). If 0, the server uses its default of 10.
 	Size int
 	// Page is the zero-based page index. If 0, returns the first page.
 	Page int
@@ -30,6 +35,7 @@ type TableAccessor[T any] interface {
 	Find(ctx context.Context, tableId string, query map[string]any, opts ...FindOptions) ([]T, error)
 	Count(ctx context.Context, tableId string, query map[string]any) (int, error)
 	Delete(ctx context.Context, tableId string, query map[string]any) error
+	DeleteByIds(ctx context.Context, tableId string, rowIds []string) error
 	Update(ctx context.Context, tableId string, query map[string]any, data *T) ([]T, error)
 }
 
@@ -189,9 +195,13 @@ func (t *CnipsTableAccessor[T]) Insert(ctx context.Context, tableId string, data
 }
 
 // BulkInsert inserts multiple records into the specified table.
+// Maximum 20 rows per request.
 func (t *CnipsTableAccessor[T]) BulkInsert(ctx context.Context, tableId string, data []T) error {
 	if len(data) == 0 {
 		return fmt.Errorf("data cannot be empty")
+	}
+	if len(data) > MaxRowsPerRequest {
+		return fmt.Errorf("bulk insert limited to %d rows per request, got %d", MaxRowsPerRequest, len(data))
 	}
 
 	requestURL, err := t.buildURL(tableId)
@@ -215,7 +225,7 @@ func (t *CnipsTableAccessor[T]) BulkInsert(ctx context.Context, tableId string, 
 // Find retrieves records from the specified table matching the query.
 // Uses POST request to /search endpoint with query in the request body.
 // Without FindOptions the server applies its defaults (page=0, size=10).
-// Pass FindOptions to control pagination. Maximum size is 10000.
+// Pass FindOptions to control pagination. Maximum size is 20.
 func (t *CnipsTableAccessor[T]) Find(ctx context.Context, tableId string, query map[string]any, opts ...FindOptions) ([]T, error) {
 	requestURL, err := t.buildSearchURL(tableId)
 	if err != nil {
@@ -363,6 +373,37 @@ func (t *CnipsTableAccessor[T]) Delete(ctx context.Context, tableId string, quer
 	body, err := json.Marshal(requestBody)
 	if err != nil {
 		return fmt.Errorf("failed to marshal query: %w", err)
+	}
+
+	resp, err := t.doRequest(ctx, http.MethodDelete, requestURL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+
+	return t.handleResponse(resp, http.StatusOK, http.StatusNoContent)
+}
+
+// DeleteByIds removes specific rows by their IDs.
+// Maximum 100 row IDs per request.
+func (t *CnipsTableAccessor[T]) DeleteByIds(ctx context.Context, tableId string, rowIds []string) error {
+	if len(rowIds) == 0 {
+		return fmt.Errorf("rowIds cannot be empty")
+	}
+	if len(rowIds) > MaxDeleteIDs {
+		return fmt.Errorf("deleteByIds limited to %d IDs per request, got %d", MaxDeleteIDs, len(rowIds))
+	}
+
+	requestURL, err := t.buildURL(tableId)
+	if err != nil {
+		return err
+	}
+
+	requestBody := map[string]any{
+		"rowIds": rowIds,
+	}
+	body, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal rowIds: %w", err)
 	}
 
 	resp, err := t.doRequest(ctx, http.MethodDelete, requestURL, bytes.NewReader(body))

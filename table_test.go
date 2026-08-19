@@ -357,6 +357,21 @@ func TestBulkInsert(t *testing.T) {
 		}
 	})
 
+	t.Run("ExceedsMaxRows", func(t *testing.T) {
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
+		data := make([]TestData, MaxRowsPerRequest+1)
+		for i := range data {
+			data[i] = TestData{ID: i, Name: fmt.Sprintf("test%d", i)}
+		}
+		err := accessor.BulkInsert(context.Background(), "table1", data)
+		if err == nil {
+			t.Fatal("expected error for exceeding max rows")
+		}
+		if !strings.Contains(err.Error(), "limited to") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
 	t.Run("EmptyTableId", func(t *testing.T) {
 		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
 		data := []TestData{{ID: 1, Name: "test"}}
@@ -963,6 +978,95 @@ func TestCount(t *testing.T) {
 		defer cancel()
 
 		_, err := accessor.Count(ctx, "table1", map[string]any{})
+		if err == nil {
+			t.Fatal("expected error for network failure")
+		}
+	})
+}
+
+func TestDeleteByIds(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodDelete {
+				t.Errorf("expected DELETE, got %s", r.Method)
+			}
+			var requestBody map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+				t.Fatalf("failed to decode request: %v", err)
+			}
+			ids, ok := requestBody["rowIds"]
+			if !ok {
+				t.Fatal("expected rowIds in request body")
+			}
+			idsList, ok := ids.([]any)
+			if !ok || len(idsList) != 2 {
+				t.Errorf("expected 2 rowIds, got %v", ids)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
+		err := accessor.DeleteByIds(context.Background(), "table1", []string{"id-1", "id-2"})
+		if err != nil {
+			t.Fatalf("DeleteByIds failed: %v", err)
+		}
+	})
+
+	t.Run("EmptyRowIds", func(t *testing.T) {
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
+		err := accessor.DeleteByIds(context.Background(), "table1", []string{})
+		if err == nil {
+			t.Fatal("expected error for empty rowIds")
+		}
+		if err.Error() != "rowIds cannot be empty" {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("ExceedsMaxIds", func(t *testing.T) {
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
+		ids := make([]string, MaxDeleteIDs+1)
+		for i := range ids {
+			ids[i] = fmt.Sprintf("id-%d", i)
+		}
+		err := accessor.DeleteByIds(context.Background(), "table1", ids)
+		if err == nil {
+			t.Fatal("expected error for exceeding max IDs")
+		}
+		if !strings.Contains(err.Error(), "limited to") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("EmptyTableId", func(t *testing.T) {
+		accessor := NewCnipsTableAccessor[TestData]("https://example.com", "api-key")
+		err := accessor.DeleteByIds(context.Background(), "", []string{"id-1"})
+		if err == nil {
+			t.Fatal("expected error for empty tableId")
+		}
+	})
+
+	t.Run("ErrorStatus", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte("forbidden"))
+		}))
+		defer server.Close()
+
+		accessor := NewCnipsTableAccessor[TestData](server.URL, "api-key")
+		err := accessor.DeleteByIds(context.Background(), "table1", []string{"id-1"})
+		if err == nil {
+			t.Fatal("expected error for bad status")
+		}
+	})
+
+	t.Run("NetworkError", func(t *testing.T) {
+		accessor := NewCnipsTableAccessor[TestData]("http://127.0.0.1:1", "api-key")
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		err := accessor.DeleteByIds(ctx, "table1", []string{"id-1"})
 		if err == nil {
 			t.Fatal("expected error for network failure")
 		}
